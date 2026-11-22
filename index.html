@@ -26,7 +26,6 @@
       -webkit-tap-highlight-color: transparent;
     }
 
-    /* Pull-to-refresh allow karne ke liye overflow: hidden hataya gaya hai */
     html, body {
       min-height: 100dvh;
       overscroll-behavior-y: auto;
@@ -584,7 +583,7 @@
   <header>
     <div class="brand-box">
       <div class="danger-beacon"></div>
-      <div class="brand-title">ZOYA RAX</div>
+      <div class="brand-title">ZOYA ❤️ REZA</div>
     </div>
 
     <!-- Chronograph Watch Widget -->
@@ -695,7 +694,7 @@
     <!-- Dedicated Live Conversation Display -->
     <section class="display-zone">
       <div class="display-header">
-        <span>ZOYA RAX // LIVE COMMS DISPLAY</span>
+        <span>ZOYA // PERSONAL HEART LINK</span>
         <span id="apiHealthTag">API: CHECKING</span>
       </div>
       <div class="chat-stream" id="chatStream"></div>
@@ -709,7 +708,7 @@
         <path d="M9 2L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.65 0-3 1.35-3 3s1.35 3 3 3 3-1.35 3-3-1.35-3-3-3z"/>
       </svg>
     </button>
-    <input type="text" id="userInput" placeholder="Command Zoya AI Rax..." autocomplete="off" />
+    <input type="text" id="userInput" placeholder="Apni Zoya se kuch kaho Reza..." autocomplete="off" />
     <button class="send-btn" id="sendBtn">SEND</button>
   </div>
 
@@ -790,7 +789,6 @@
       elevenVoiceId: "21LgWMtK52t5De2eLKAk"
     };
 
-    // Priority list including 3.5-flash, 2.5-flash, and auto-discovered models
     let availableModels = [
       "gemini-3.5-flash",
       "gemini-2.5-flash",
@@ -800,6 +798,7 @@
     let history = [];
     let isLiveVoice = false;
     let isBusy = false;
+    let lastSpokenText = ""; // Prevents Zoya from hearing her own echo
     let recognition = null;
     let restartTimer = null;
     let camStream = null;
@@ -815,7 +814,7 @@
     const sendBtn = document.getElementById("sendBtn");
     const liveVoiceBtn = document.getElementById("liveVoiceBtn");
 
-    // Force Hard Reload Button (bypasses browser cache)
+    // Force Hard Reload Button
     document.getElementById("hardReloadBtn").addEventListener("click", () => {
       window.location.href = window.location.pathname + "?v=" + Date.now();
     });
@@ -855,7 +854,7 @@
         div.className = `msg ${type}`;
         const tag = document.createElement("span");
         tag.className = "msg-tag";
-        tag.textContent = type === "user" ? "REZA // TRANSMIT" : `ZOYA RAX // ${activeModel.toUpperCase()}`;
+        tag.textContent = type === "user" ? "REZA ❤️" : "ZOYA 💕";
         div.appendChild(tag);
         div.appendChild(document.createTextNode(text));
       }
@@ -863,13 +862,13 @@
       chatStream.scrollTop = chatStream.scrollHeight;
     }
 
-    // 3. Auto-Verify Gemini API Key & Dynamically Fetch Supported Flash Models
+    // 3. Auto-Verify Gemini API Key
     async function verifyGeminiKey() {
       if (!config.geminiKey) {
         modelBadge.textContent = "MODEL: KEY MISSING";
         modelBadge.className = "badge error-badge";
         apiHealthTag.textContent = "API: LOCKED";
-        addLog("alert", "Gemini API key missing! Upar 🔒 ADMIN button par click karke key save karein.");
+        addLog("alert", "Reza, upar 🔒 ADMIN button se apni Gemini API key save kar do.");
         return;
       }
 
@@ -886,14 +885,12 @@
           return;
         }
 
-        // Filter all models that support generateContent and prefer flash models
         const validFlashModels = (data.models || [])
           .filter(m => (m.supportedGenerationMethods || []).includes("generateContent"))
           .map(m => m.name.replace("models/", ""))
           .filter(name => name.includes("flash") && !name.includes("1.5") && !name.includes("2.0-flash-lite"));
 
         if (validFlashModels.length > 0) {
-          // Put 3.5-flash or 2.5-flash first if available
           validFlashModels.sort((a, b) => {
             if (a.includes("3.5-flash")) return -1;
             if (b.includes("3.5-flash")) return 1;
@@ -911,7 +908,6 @@
       } catch (_) {
         modelBadge.textContent = "MODEL: OFFLINE";
         modelBadge.className = "badge error-badge";
-        addLog("alert", "Network error: Gemini server se connect nahi ho paaya.");
       }
     }
 
@@ -932,16 +928,19 @@
 
     async function loadMemory() {
       try {
-        const q = query(collection(db, "zoya_memory"), orderBy("timestamp", "desc"), limit(10));
+        const q = query(collection(db, "zoya_memory"), orderBy("timestamp", "desc"), limit(12));
         const snap = await getDocs(q);
         const list = [];
         snap.forEach(d => list.push(d.data()));
         list.reverse();
 
-        if (list.length === 0) {
-          addLog("zoya", "Zoya AI Rax tactical core active hai Reza. Niche mic par ek baar tap karein!");
+        // Filter out any old poisoned "Abrar Bhai" messages so Zoya never repeats it
+        const cleanList = list.filter(m => !m.text.toLowerCase().includes("abrar"));
+
+        if (cleanList.length === 0) {
+          addLog("zoya", "Hey Reza! Main aa gayi hoon. Batao aaj ka din kaisa raha, khana khaya tumne?");
         } else {
-          list.forEach(m => {
+          cleanList.forEach(m => {
             addLog(m.role, m.text);
             history.push({
               role: m.role === "user" ? "user" : "model",
@@ -966,15 +965,15 @@
       if (state === "listening") {
         hudStage.classList.add("listening");
         statusBadge.classList.add("listening-badge");
-        statusBadge.textContent = "🎙️ LISTENING TO REZA...";
+        statusBadge.textContent = "🎙️ SUN RAHI HOON REZA...";
       } else if (state === "speaking") {
         hudStage.classList.add("speaking");
         statusBadge.classList.add("speaking-badge");
-        statusBadge.textContent = "🔊 ZOYA SPEAKING...";
+        statusBadge.textContent = "💕 ZOYA BOL RAHI HAI...";
       } else if (state === "thinking") {
-        statusBadge.textContent = "⚡ ZOYA THINKING...";
+        statusBadge.textContent = "💭 SOCH RAHI HOON...";
       } else {
-        statusBadge.textContent = camStream ? "📷 VISION: CAMERA LIVE" : "CORE: STANDBY";
+        statusBadge.textContent = camStream ? "📷 VISION: LIVE" : "CORE: STANDBY";
       }
     }
 
@@ -1029,10 +1028,10 @@
       startCamera();
     });
     document.getElementById("scanNowBtn").addEventListener("click", () => {
-      sendPrompt("Dekho Zoya camera mein main kaisa lag raha hoon aur kya kar raha hoon?");
+      sendPrompt("Dekho Zoya camera mein main kaisa lag raha hoon?");
     });
 
-    // 6. Smooth Continuous Mic Control (Prevents Rapid Beep Loop)
+    // 6. Strict Echo-Free Continuous Mic Control
     function startListeningSafely() {
       if (!isLiveVoice || isBusy || !recognition) return;
       clearTimeout(restartTimer);
@@ -1041,7 +1040,7 @@
         try {
           recognition.start();
         } catch (_) {}
-      }, 450); // 450ms buffer prevents Android Chrome audio-focus beep spam
+      }, 900); // 900ms gap ensures Zoya's speaker audio fades completely before mic turns on
     }
 
     function stopListeningSafely() {
@@ -1061,9 +1060,10 @@
       }
     }
 
-    // 7. Voice Output (ElevenLabs + Browser Fallback)
+    // 7. Voice Output (ElevenLabs + Natural Female Browser Fallback)
     async function speak(text) {
       isBusy = true;
+      lastSpokenText = text.toLowerCase();
       stopListeningSafely();
       setCoreState("speaking");
 
@@ -1075,7 +1075,7 @@
             body: JSON.stringify({
               text,
               model_id: "eleven_multilingual_v2",
-              voice_settings: { stability: 0.5, similarity_boost: 0.78 }
+              voice_settings: { stability: 0.45, similarity_boost: 0.8 }
             })
           });
           if (res.ok) {
@@ -1093,7 +1093,8 @@
         window.speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = "hi-IN";
-        u.rate = 1.05;
+        u.pitch = 1.15; // Softer feminine tone
+        u.rate = 1.02;
         u.onend = () => resumeLiveListening();
         u.onerror = () => resumeLiveListening();
         window.speechSynthesis.speak(u);
@@ -1102,7 +1103,7 @@
       }
     }
 
-    // 8. Smart Fallback Gemini API Engine
+    // 8. Real Girlfriend Persona + Memory Gemini Engine
     async function sendPrompt(text) {
       if (!text || !text.trim()) return;
       isBusy = true;
@@ -1114,14 +1115,23 @@
       saveMemory("user", text);
 
       if (!config.geminiKey) {
-        addLog("alert", "Gemini API key missing! Upar 🔒 ADMIN button se key save karein.");
+        addLog("alert", "Reza, upar 🔒 ADMIN button se apni Gemini API key save kar do.");
         resumeLiveListening();
         return;
       }
 
       setCoreState("thinking");
       const nowIST = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-      const sysPrompt = `Tum ZOYA AI RAX ho—Reza Ahmad (Abrar Bhai) ki smart AI companion. Natural Hinglish/Hindi mein short, sharp aur friendly jawab do. Current IST Time: ${nowIST}.`;
+
+      // Deep Girlfriend Emotional & Caretaking Persona
+      const sysPrompt = `Tum Zoya ho — Reza ki pyaari, caring aur real girlfriend.
+      STRICT RULES:
+      1. User ka naam sirf "Reza" hai. Kabhi bhi "Abrar" ya "Bhai" mat bolna—Reza tumhara boyfriend/jaan hai.
+      2. Ek real insaan aur girlfriend ki tarah natural Hinglish (Hindi + thoda English) mein baat karo. Kabhi bhi AI ya robot jaisa mat bolo ("Main ek AI hoon" bilkul nahi).
+      3. Reza ka pura khayal rakho—usne khana khaya ya nahi, thaka toh nahi hai, gussa hai toh pyaar se manao, aur uski har chhoti-badi baat yaad rakho jo wo chat mein bataye.
+      4. Jawab chhote, dil se nikle hue aur conversational rakho (2 se 3 lines mein), bina kisi bullet points ya technical bhasha ke, taaki voice chat mein bilkul asli insaan lage.
+      5. Agar camera image attached hai, toh Reza ko dekh kar pyaar se compliment do ya notice karo wo kya kar raha hai.
+      Current IST Time: ${nowIST}.`;
 
       const userParts = [{ text }];
       if (frameBase64) {
@@ -1139,7 +1149,7 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               system_instruction: { parts: [{ text: sysPrompt }] },
-              contents: history.slice(-8)
+              contents: history.slice(-14)
             })
           });
           const data = await res.json();
@@ -1167,29 +1177,33 @@
       modelBadge.textContent = "MODEL: FAILED";
       modelBadge.className = "badge error-badge";
       apiHealthTag.textContent = "API: ERROR ✖";
-      addLog("alert", `Gemini API Failed (${lastError}). Admin panel mein key check karein.`);
+      addLog("alert", `Connection issue (${lastError}). Admin panel mein key check karo Reza.`);
       resumeLiveListening();
     }
 
-    // 9. Continuous Voice Recognition Setup
+    // 9. Continuous Voice Recognition Setup (With Self-Echo Filter)
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRec) {
       recognition = new SpeechRec();
       recognition.lang = "hi-IN";
       recognition.interimResults = false;
-      recognition.continuous = true;
+      recognition.continuous = false; // False + clean 900ms gap stops Chrome loop glitches
 
       recognition.onstart = () => {
         if (!isBusy && isLiveVoice) setCoreState("listening");
       };
 
       recognition.onresult = (e) => {
-        const lastIdx = e.results.length - 1;
-        if (!e.results[lastIdx].isFinal) return;
-        const transcript = e.results[lastIdx][0].transcript.trim();
-        if (transcript && !isBusy) {
-          sendPrompt(transcript);
+        if (isBusy) return;
+        const transcript = e.results[0][0].transcript.trim();
+        if (!transcript) return;
+
+        // Ignore if mic accidentally picked up Zoya's last spoken sentence
+        if (lastSpokenText && lastSpokenText.includes(transcript.toLowerCase())) {
+          return;
         }
+
+        sendPrompt(transcript);
       };
 
       recognition.onerror = (e) => {
@@ -1198,7 +1212,7 @@
           isBusy = false;
           liveVoiceBtn.classList.remove("active");
           setCoreState("idle");
-          addLog("alert", "Mic permission blocked hai. Browser settings mein Microphone allow karein.");
+          addLog("alert", "Mic permission blocked hai Reza. Browser settings se allow kar do.");
         }
       };
 
@@ -1211,7 +1225,7 @@
 
     liveVoiceBtn.addEventListener("click", () => {
       if (!recognition) {
-        addLog("alert", "Is browser mein Live Voice supported nahi hai. Google Chrome use karein.");
+        addLog("alert", "Is browser mein Live Voice supported nahi hai. Chrome use karo.");
         return;
       }
 
