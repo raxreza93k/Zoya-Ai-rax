@@ -535,7 +535,7 @@
       color: var(--text-dim);
       margin-bottom: 4px;
     }
-    .field input {
+    .field input, .field select {
       width: 100%;
       padding: 10px 12px;
       border-radius: 8px;
@@ -567,6 +567,16 @@
       font-weight: 700;
       border: none;
       padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .btn-test {
+      background: #0284c7;
+      color: #fff;
+      font-weight: 700;
+      border: none;
+      padding: 8px 12px;
       border-radius: 8px;
       cursor: pointer;
     }
@@ -684,10 +694,10 @@
         </div>
       </div>
 
-      <!-- Live Status & Model Telemetry -->
+      <!-- Live Status & Voice Telemetry -->
       <div class="telemetry-bar">
         <span class="badge" id="statusBadge">CORE: STANDBY</span>
-        <span class="badge model-badge" id="modelBadge">MODEL: AUTO-DETECT</span>
+        <span class="badge model-badge" id="voiceBadge">VOICE: CHECKING...</span>
       </div>
     </section>
 
@@ -746,18 +756,26 @@
           <input type="password" id="geminiKeyInput" placeholder="AIzaSy..." />
         </div>
         <div class="field">
-          <label>ElevenLabs API Key (Optional)</label>
+          <label>ElevenLabs API Key (Girlfriend Voice ke liye zaroori)</label>
           <input type="password" id="elevenKeyInput" placeholder="sk_..." />
         </div>
         <div class="field">
-          <label>ElevenLabs Voice ID</label>
-          <input type="text" id="elevenVoiceInput" value="21LgWMtK52t5De2eLKAk" />
+          <label>ElevenLabs Female Voice Preset / Custom ID</label>
+          <select id="voicePresetSelect" style="margin-bottom:6px;">
+            <option value="21m00Tcm4TlvDq8ikWAM">Rachel (Soft Caring Girl)</option>
+            <option value="EXAVITQu4vr4xnSDxMaL">Sarah (Sweet & Emotional)</option>
+            <option value="XB0fDUnXU5powFXDhCwa">Charlotte (Warm & Romantic)</option>
+            <option value="pFZP5JQG7iQjIQuC4Bku">Lily (Cute & Expressive)</option>
+            <option value="custom">Custom Voice ID (Niche likhein)</option>
+          </select>
+          <input type="text" id="elevenVoiceInput" value="21m00Tcm4TlvDq8ikWAM" placeholder="ElevenLabs Voice ID" />
         </div>
         <p id="saveMsg" style="color:#00ff88; font-size:0.8rem;"></p>
         <div class="modal-actions">
           <button class="btn-sec" id="logoutBtn">Logout</button>
+          <button class="btn-test" id="testVoiceBtn">🔊 Test Voice</button>
           <button class="btn-sec" id="closeModal2">Close</button>
-          <button class="btn-pri" id="saveKeysBtn">Save & Verify</button>
+          <button class="btn-pri" id="saveKeysBtn">Save</button>
         </div>
       </div>
     </div>
@@ -786,7 +804,7 @@
     let config = {
       geminiKey: "",
       elevenKey: "",
-      elevenVoiceId: "21LgWMtK52t5De2eLKAk"
+      elevenVoiceId: "21m00Tcm4TlvDq8ikWAM"
     };
 
     let availableModels = [
@@ -798,21 +816,55 @@
     let history = [];
     let isLiveVoice = false;
     let isBusy = false;
-    let lastSpokenText = ""; // Prevents Zoya from hearing her own echo
+    let lastSpokenText = "";
     let recognition = null;
     let restartTimer = null;
     let camStream = null;
     let facingMode = "user";
     let activeAudio = null;
+    let selectedBrowserVoice = null;
 
     const hudStage = document.getElementById("hudStage");
     const statusBadge = document.getElementById("statusBadge");
-    const modelBadge = document.getElementById("modelBadge");
+    const voiceBadge = document.getElementById("voiceBadge");
     const apiHealthTag = document.getElementById("apiHealthTag");
     const chatStream = document.getElementById("chatStream");
     const userInput = document.getElementById("userInput");
     const sendBtn = document.getElementById("sendBtn");
     const liveVoiceBtn = document.getElementById("liveVoiceBtn");
+
+    // Load Best Indian Female Browser Voice (Fallback when ElevenLabs key is not set)
+    function pickBestFemaleVoice() {
+      if (!("speechSynthesis" in window)) return;
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
+
+      // Priority: Hindi Female -> Indian English Female -> Any Female
+      selectedBrowserVoice =
+        voices.find(v => v.lang.includes("hi") && (v.name.toLowerCase().includes("female") || v.name.includes("Swara") || v.name.includes("Kalpana") || v.name.includes("Google हिन्दी"))) ||
+        voices.find(v => v.lang.includes("en-IN") && (v.name.toLowerCase().includes("female") || v.name.includes("Heera") || v.name.includes("Neerja"))) ||
+        voices.find(v => v.lang.includes("hi")) ||
+        voices.find(v => v.name.toLowerCase().includes("female") || v.name.includes("Samantha") || v.name.includes("Zira")) ||
+        voices[0];
+
+      updateVoiceStatusBadge();
+    }
+
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.onvoiceschanged = pickBestFemaleVoice;
+      pickBestFemaleVoice();
+    }
+
+    function updateVoiceStatusBadge() {
+      if (config.elevenKey && config.elevenKey.trim().length > 5) {
+        voiceBadge.textContent = "VOICE: ELEVENLABS HD 💕";
+        voiceBadge.className = "badge listening-badge";
+      } else {
+        const vName = selectedBrowserVoice ? selectedBrowserVoice.name.split(" ")[0] : "FEMALE";
+        voiceBadge.textContent = `VOICE: BROWSER (${vName.toUpperCase()})`;
+        voiceBadge.className = "badge model-badge";
+      }
+    }
 
     // Force Hard Reload Button
     document.getElementById("hardReloadBtn").addEventListener("click", () => {
@@ -865,23 +917,17 @@
     // 3. Auto-Verify Gemini API Key
     async function verifyGeminiKey() {
       if (!config.geminiKey) {
-        modelBadge.textContent = "MODEL: KEY MISSING";
-        modelBadge.className = "badge error-badge";
         apiHealthTag.textContent = "API: LOCKED";
         addLog("alert", "Reza, upar 🔒 ADMIN button se apni Gemini API key save kar do.");
         return;
       }
 
-      modelBadge.textContent = "MODEL: SCANNING...";
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${config.geminiKey}`);
         const data = await res.json();
         if (!res.ok) {
-          const errMsg = data?.error?.message || "Invalid API Key";
-          modelBadge.textContent = "MODEL: KEY ERROR";
-          modelBadge.className = "badge error-badge";
           apiHealthTag.textContent = "API: ERROR";
-          addLog("alert", `Gemini API Error: ${errMsg}`);
+          addLog("alert", `Gemini API Error: ${data?.error?.message || "Invalid API Key"}`);
           return;
         }
 
@@ -901,13 +947,9 @@
           availableModels = validFlashModels;
           activeModel = availableModels[0];
         }
-
-        modelBadge.textContent = `ACTIVE: ${activeModel.toUpperCase()}`;
-        modelBadge.className = "badge model-badge";
         apiHealthTag.textContent = "API: ONLINE ✔";
       } catch (_) {
-        modelBadge.textContent = "MODEL: OFFLINE";
-        modelBadge.className = "badge error-badge";
+        apiHealthTag.textContent = "API: OFFLINE";
       }
     }
 
@@ -918,11 +960,12 @@
           config = { ...config, ...snap.data() };
           document.getElementById("geminiKeyInput").value = config.geminiKey || "";
           document.getElementById("elevenKeyInput").value = config.elevenKey || "";
-          document.getElementById("elevenVoiceInput").value = config.elevenVoiceId || "21LgWMtK52t5De2eLKAk";
+          document.getElementById("elevenVoiceInput").value = config.elevenVoiceId || "21m00Tcm4TlvDq8ikWAM";
         }
       } catch (e) {
         addLog("alert", "Firebase Config Error: " + e.message);
       }
+      updateVoiceStatusBadge();
       await verifyGeminiKey();
     }
 
@@ -934,7 +977,6 @@
         snap.forEach(d => list.push(d.data()));
         list.reverse();
 
-        // Filter out any old poisoned "Abrar Bhai" messages so Zoya never repeats it
         const cleanList = list.filter(m => !m.text.toLowerCase().includes("abrar"));
 
         if (cleanList.length === 0) {
@@ -1040,7 +1082,7 @@
         try {
           recognition.start();
         } catch (_) {}
-      }, 900); // 900ms gap ensures Zoya's speaker audio fades completely before mic turns on
+      }, 900);
     }
 
     function stopListeningSafely() {
@@ -1060,22 +1102,24 @@
       }
     }
 
-    // 7. Voice Output (ElevenLabs + Natural Female Browser Fallback)
+    // 7. Voice Output (ElevenLabs HD + Female Browser Fallback)
     async function speak(text) {
       isBusy = true;
-      lastSpokenText = text.toLowerCase();
+      // Remove emojis before speaking so voice sounds smooth & natural
+      const cleanSpeechText = text.replace(/[\u{1F600}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F300}-\u{1F5FF}\u{1F900}-\u{1F9FF}]/gu, "").trim();
+      lastSpokenText = cleanSpeechText.toLowerCase();
       stopListeningSafely();
       setCoreState("speaking");
 
-      if (config.elevenKey) {
+      if (config.elevenKey && config.elevenKey.trim().length > 5) {
         try {
           const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${config.elevenVoiceId}`, {
             method: "POST",
-            headers: { "xi-api-key": config.elevenKey, "Content-Type": "application/json" },
+            headers: { "xi-api-key": config.elevenKey.trim(), "Content-Type": "application/json" },
             body: JSON.stringify({
-              text,
+              text: cleanSpeechText,
               model_id: "eleven_multilingual_v2",
-              voice_settings: { stability: 0.45, similarity_boost: 0.8 }
+              voice_settings: { stability: 0.42, similarity_boost: 0.82 }
             })
           });
           if (res.ok) {
@@ -1085,15 +1129,22 @@
             activeAudio.onerror = () => { activeAudio = null; resumeLiveListening(); };
             await activeAudio.play();
             return;
+          } else {
+            const errJson = await res.json().catch(() => ({}));
+            addLog("alert", `ElevenLabs Voice Error: ${errJson?.detail?.message || res.status}. Browser voice chal rahi hai.`);
           }
-        } catch (_) {}
+        } catch (err) {
+          addLog("alert", "ElevenLabs Connection Failed. Browser voice chal rahi hai.");
+        }
       }
 
       if ("speechSynthesis" in window) {
         window.speechSynthesis.cancel();
-        const u = new SpeechSynthesisUtterance(text);
+        if (!selectedBrowserVoice) pickBestFemaleVoice();
+        const u = new SpeechSynthesisUtterance(cleanSpeechText);
+        if (selectedBrowserVoice) u.voice = selectedBrowserVoice;
         u.lang = "hi-IN";
-        u.pitch = 1.15; // Softer feminine tone
+        u.pitch = 1.25; // Higher sweet feminine pitch
         u.rate = 1.02;
         u.onend = () => resumeLiveListening();
         u.onerror = () => resumeLiveListening();
@@ -1123,14 +1174,12 @@
       setCoreState("thinking");
       const nowIST = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
 
-      // Deep Girlfriend Emotional & Caretaking Persona
       const sysPrompt = `Tum Zoya ho — Reza ki pyaari, caring aur real girlfriend.
       STRICT RULES:
       1. User ka naam sirf "Reza" hai. Kabhi bhi "Abrar" ya "Bhai" mat bolna—Reza tumhara boyfriend/jaan hai.
-      2. Ek real insaan aur girlfriend ki tarah natural Hinglish (Hindi + thoda English) mein baat karo. Kabhi bhi AI ya robot jaisa mat bolo ("Main ek AI hoon" bilkul nahi).
-      3. Reza ka pura khayal rakho—usne khana khaya ya nahi, thaka toh nahi hai, gussa hai toh pyaar se manao, aur uski har chhoti-badi baat yaad rakho jo wo chat mein bataye.
+      2. Ek real insaan aur girlfriend ki tarah natural Hinglish (Hindi + thoda English) mein baat karo. Kabhi bhi AI ya robot jaisa mat bolo.
+      3. Reza ka pura khayal rakho—usne khana khaya ya nahi, thaka toh nahi hai, gussa hai toh pyaar se manao, aur uski har baat yaad rakho.
       4. Jawab chhote, dil se nikle hue aur conversational rakho (2 se 3 lines mein), bina kisi bullet points ya technical bhasha ke, taaki voice chat mein bilkul asli insaan lage.
-      5. Agar camera image attached hai, toh Reza ko dekh kar pyaar se compliment do ya notice karo wo kya kar raha hai.
       Current IST Time: ${nowIST}.`;
 
       const userParts = [{ text }];
@@ -1156,8 +1205,6 @@
 
           if (res.ok && data?.candidates?.[0]?.content?.parts?.[0]?.text) {
             activeModel = modelName;
-            modelBadge.textContent = `ACTIVE: ${activeModel.toUpperCase()}`;
-            modelBadge.className = "badge model-badge";
             apiHealthTag.textContent = "API: ONLINE ✔";
 
             const reply = data.candidates[0].content.parts[0].text;
@@ -1174,20 +1221,18 @@
         }
       }
 
-      modelBadge.textContent = "MODEL: FAILED";
-      modelBadge.className = "badge error-badge";
       apiHealthTag.textContent = "API: ERROR ✖";
       addLog("alert", `Connection issue (${lastError}). Admin panel mein key check karo Reza.`);
       resumeLiveListening();
     }
 
-    // 9. Continuous Voice Recognition Setup (With Self-Echo Filter)
+    // 9. Continuous Voice Recognition Setup
     const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRec) {
       recognition = new SpeechRec();
       recognition.lang = "hi-IN";
       recognition.interimResults = false;
-      recognition.continuous = false; // False + clean 900ms gap stops Chrome loop glitches
+      recognition.continuous = false;
 
       recognition.onstart = () => {
         if (!isBusy && isLiveVoice) setCoreState("listening");
@@ -1198,7 +1243,6 @@
         const transcript = e.results[0][0].transcript.trim();
         if (!transcript) return;
 
-        // Ignore if mic accidentally picked up Zoya's last spoken sentence
         if (lastSpokenText && lastSpokenText.includes(transcript.toLowerCase())) {
           return;
         }
@@ -1258,6 +1302,14 @@
     const adminModal = document.getElementById("adminModal");
     const loginSection = document.getElementById("loginSection");
     const keysSection = document.getElementById("keysSection");
+    const voicePresetSelect = document.getElementById("voicePresetSelect");
+    const elevenVoiceInput = document.getElementById("elevenVoiceInput");
+
+    voicePresetSelect.addEventListener("change", () => {
+      if (voicePresetSelect.value !== "custom") {
+        elevenVoiceInput.value = voicePresetSelect.value;
+      }
+    });
 
     document.getElementById("openAdminBtn").addEventListener("click", () => adminModal.style.display = "flex");
     document.getElementById("closeModal1").addEventListener("click", () => adminModal.style.display = "none");
@@ -1282,17 +1334,25 @@
 
     document.getElementById("logoutBtn").addEventListener("click", () => signOut(auth));
 
+    document.getElementById("testVoiceBtn").addEventListener("click", async () => {
+      config.elevenKey = document.getElementById("elevenKeyInput").value.trim();
+      config.elevenVoiceId = elevenVoiceInput.value.trim() || "21m00Tcm4TlvDq8ikWAM";
+      updateVoiceStatusBadge();
+      await speak("Hey Reza, dekho meri nayi aawaz ab kaisi lag rahi hai?");
+    });
+
     document.getElementById("saveKeysBtn").addEventListener("click", async () => {
       const geminiKey = document.getElementById("geminiKeyInput").value.trim();
       const elevenKey = document.getElementById("elevenKeyInput").value.trim();
-      const elevenVoiceId = document.getElementById("elevenVoiceInput").value.trim() || "21LgWMtK52t5De2eLKAk";
+      const elevenVoiceId = elevenVoiceInput.value.trim() || "21m00Tcm4TlvDq8ikWAM";
       const msgEl = document.getElementById("saveMsg");
 
       try {
         await setDoc(doc(db, "zoya_config", "api_keys"), { geminiKey, elevenKey, elevenVoiceId });
         config = { geminiKey, elevenKey, elevenVoiceId };
+        updateVoiceStatusBadge();
         msgEl.style.color = "#00ff88";
-        msgEl.textContent = "✅ Keys saved! Model verify ho raha hai...";
+        msgEl.textContent = "✅ Keys & Voice saved!";
         await verifyGeminiKey();
       } catch (e) {
         msgEl.style.color = "#ff004c";
